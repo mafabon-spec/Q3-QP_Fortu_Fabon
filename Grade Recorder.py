@@ -1,13 +1,17 @@
-from flask import Flask, request, jsonify
 import json
-import statistics
 import os
-
-app = Flask(__name__)
+import statistics
 
 DATA_FILE = "data.json"
 
-# ---------------- FILE HANDLING ---------------- #
+SUBJECTS = [
+    "Math 2", "Math 3", "Social Science 2", "Earth Science 1",
+    "Physics 1", "Bio 1", "Chem 1", "AdTech 2",
+    "Computer Science", "PEHM", "English 2", "Filipino 21"
+]
+
+
+# ourrrrrr file 
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -16,128 +20,168 @@ def load_data():
         with open(DATA_FILE, "r") as f:
             return json.load(f)
     except:
-        return {}  # prevent crash if file is corrupted
+        return {}
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# ---------------- CRUD ---------------- #
 
-@app.route("/add_class", methods=["POST"])
+#  FUNCTIONS  
+
 def add_class():
     data = load_data()
-    req = request.get_json()
-
-    if not req or "class_name" not in req:
-        return jsonify({"error": "class_name is required"}), 400
-
-    class_name = req["class_name"]
+    class_name = input("Enter class name: ")
 
     if class_name in data:
-        return jsonify({"error": "Class already exists"}), 400
+        print("Class already exists.")
+        return
 
     data[class_name] = {}
     save_data(data)
-    return jsonify({"message": "Class added"})
+    print("Class added!")
 
-
-@app.route("/add_student", methods=["POST"])
 def add_student():
     data = load_data()
-    req = request.get_json()
-
-    if not req or "class_name" not in req or "student" not in req:
-        return jsonify({"error": "class_name and student required"}), 400
-
-    class_name = req["class_name"]
-    student = req["student"]
+    class_name = input("Enter class name: ")
 
     if class_name not in data:
-        return jsonify({"error": "Class not found"}), 404
+        print("Class not found.")
+        return
+
+    student = input("Enter student name: ")
 
     if student in data[class_name]:
-        return jsonify({"error": "Student already exists"}), 400
+        print("Student already exists.")
+        return
 
-    data[class_name][student] = []
+    # initialize all subjects
+    data[class_name][student] = {subj: None for subj in SUBJECTS}
+    data[class_name][student]["ValEd"] = "Incomplete"
+
     save_data(data)
-    return jsonify({"message": "Student added"})
+    print("Student added!")
 
-
-@app.route("/add_grade", methods=["POST"])
-def add_grade():
+def input_grade_per_subject():
     data = load_data()
-    req = request.get_json()
+    class_name = input("Enter class name: ")
+    student = input("Enter student name: ")
 
-    if not req or "class_name" not in req or "student" not in req or "grade" not in req:
-        return jsonify({"error": "Missing fields"}), 400
+    if class_name not in data or student not in data[class_name]:
+        print("Not found.")
+        return
 
-    class_name = req["class_name"]
-    student = req["student"]
+    print("\nSubjects:")
+    for i, subj in enumerate(SUBJECTS, 1):
+        print(f"{i}. {subj}")
+    print("13. ValEd")
+
+    choice = input("Choose subject number: ")
+
+    # Handle ValEd separately
+    if choice == "13":
+        valed = input("Enter ValEd (Complete/Incomplete): ")
+        data[class_name][student]["ValEd"] = valed
+        save_data(data)
+        print("ValEd updated!")
+        return
 
     try:
-        grade = float(req["grade"])  # ensure number
+        subj = SUBJECTS[int(choice) - 1]
     except:
-        return jsonify({"error": "Grade must be a number"}), 400
+        print("Invalid choice.")
+        return
 
-    if class_name not in data or student not in data[class_name]:
-        return jsonify({"error": "Class or student not found"}), 404
+    try:
+        grade = float(input(f"Enter grade for {subj}: "))
+        data[class_name][student][subj] = grade
+        save_data(data)
+        print("Grade recorded!")
+    except:
+        print("Invalid grade.")
 
-    data[class_name][student].append(grade)
-    save_data(data)
-    return jsonify({"message": "Grade added"})
-
-# ---------------- ANALYSIS ---------------- #
-
-@app.route("/student_stats", methods=["GET"])
 def student_stats():
     data = load_data()
-    class_name = request.args.get("class_name")
-    student = request.args.get("student")
+    class_name = input("Class: ")
+    student = input("Student: ")
 
     if class_name not in data or student not in data[class_name]:
-        return jsonify({"error": "Not found"}), 404
+        print("Not found.")
+        return
 
-    grades = data[class_name][student]
+    grades_dict = data[class_name][student]
 
-    if len(grades) == 0:
-        return jsonify({"error": "No grades"}), 400
+    # get only numeric grades
+    grades = [v for v in grades_dict.values() if isinstance(v, (int, float))]
 
-    result = {
-        "highest": max(grades),
-        "lowest": min(grades),
-        "mean": round(statistics.mean(grades), 2),
-        "mode": statistics.multimode(grades)  # safer than mode()
-    }
+    if not grades:
+        print("No grades available.")
+        return
 
-    return jsonify(result)
+    print("\n--- Student Stats ---")
+    print("Highest:", max(grades))
+    print("Lowest:", min(grades))
+    print("Mean:", round(statistics.mean(grades), 2))
+    print("Mode:", statistics.multimode(grades))
 
-
-@app.route("/class_stats", methods=["GET"])
 def class_stats():
     data = load_data()
-    class_name = request.args.get("class_name")
+    class_name = input("Class: ")
 
     if class_name not in data:
-        return jsonify({"error": "Class not found"}), 404
+        print("Class not found.")
+        return
 
     all_grades = []
+
     for student in data[class_name]:
-        all_grades.extend(data[class_name][student])
+        for subj, grade in data[class_name][student].items():
+            if isinstance(grade, (int, float)):
+                all_grades.append(grade)
 
-    if len(all_grades) == 0:
-        return jsonify({"error": "No grades"}), 400
+    if not all_grades:
+        print("No grades.")
+        return
 
-    result = {
-        "highest": max(all_grades),
-        "lowest": min(all_grades),
-        "mean": round(statistics.mean(all_grades), 2),
-        "mode": statistics.multimode(all_grades)
-    }
+    print("\n--- Class Stats ---")
+    print("Highest:", max(all_grades))
+    print("Lowest:", min(all_grades))
+    print("Mean:", round(statistics.mean(all_grades), 2))
+    print("Mode:", statistics.multimode(all_grades))
 
-    return jsonify(result)
+def show_data():
+    print(json.dumps(load_data(), indent=4))
 
-# ---------------- RUN ---------------- #
+# ---------------- MENU ---------------- #
 
-if __name__ == "__main__":
-    app.run(debug=True)
+def menu():
+    while True:
+        print("\n===== GRADE SYSTEM =====")
+        print("1. Add Class")
+        print("2. Add Student")
+        print("3. Input Grades")
+        print("4. Student Stats")
+        print("5. Class Stats")
+        print("6. Show Data")
+        print("0. Exit")
+
+        choice = input("Choose: ")
+
+        if choice == "1":
+            add_class()
+        elif choice == "2":
+            add_student()
+        elif choice == "3":
+            input_grades()
+        elif choice == "4":
+            student_stats()
+        elif choice == "5":
+            class_stats()
+        elif choice == "6":
+            show_data()
+        elif choice == "0":
+            break
+        else:
+            print("Invalid choice.")
+
+menu()
